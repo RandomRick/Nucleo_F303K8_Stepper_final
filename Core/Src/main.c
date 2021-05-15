@@ -62,7 +62,6 @@ char rxChar; // used for reading into RxBuf one character at a time
 
 unsigned long ms_tick = 0;			// ms tick, used in TIM16 ISR
 
-unsigned long deadZoneTick = 0;		// after joystick is a set time in the central posn, deactivate the stepper coils
 
 
 /* USER CODE END PV */
@@ -114,7 +113,7 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
-  JoystickInit(10, 0.5);
+  JoystickInit(20, 0.25);
   StateMachineInit();				// put my state machine into a known state
   HAL_TIM_Base_Start_IT(&htim16);	// start the 1ms timer
 
@@ -440,25 +439,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		ms_tick++;
 
 		// time for an ADC reading from the Joystick?
-		if (ms_tick % 100 == 0)
+		if (ms_tick % 50 == 0)
 		{
 			JoystickReadingFiltered();
 			InterpretADC();
 			//sprintf (txBuf, "joy = %f\r\n", joyval);
 			//HAL_UART_Transmit(&huart2, (uint8_t *)txBuf, strlen (txBuf), HAL_MAX_DELAY);
-		}
-
-		// if joystick has been untouched for 5 seconds, deactivate stepper coils
-		if (deadZoneTick == 50) // these ticks are every 100ms as per 9 lines up
-		{
-			State.RunState = STOPPED;
-			//HAL_Delay(5);	// not sure it's needed, but, delays, right?
-
-			// set all Stepper coils to low (no current anywhere)
-			HAL_GPIO_WritePin(Phase_A_GPIO_Port, Phase_A_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(Phase_B_GPIO_Port, Phase_B_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(Phase_C_GPIO_Port, Phase_C_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(Phase_D_GPIO_Port, Phase_D_Pin, GPIO_PIN_RESET);
 		}
 
 		// If runstate is stopped, do nothing

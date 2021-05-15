@@ -12,6 +12,13 @@
 #include <math.h>	// expf()
 #include <stdio.h>	// sprintf()
 
+// Globals
+unsigned long deadZoneTick = 0;		// after joystick is a set time in the central posn,
+									// deactivate the stepper coils
+unsigned long activeZoneTick= 0;	// the converse of the above.  Used to limit speed of
+									// the stepper for a little while before ramping up.
+
+
 
 extern ADC_HandleTypeDef hadc1;			// fron main.c
 
@@ -135,6 +142,7 @@ void JoystickInit(unsigned int nTaps, firFlt normBandwidth)
 void InterpretADC()
 {
 	int distanceFromMiddle = (float)joystickAdcFiltered - joystickcharacteristics.adcMiddle;
+	int distanceFromMiddleUnfiltered = (float)joystickAdcRaw - joystickcharacteristics.adcMiddle;
 
 	// determine direction
 	if (distanceFromMiddle < 0)
@@ -163,18 +171,47 @@ void InterpretADC()
 //		snprintf (txBuf, TXBUFLEN, "RIGHT ADC= %d FILT=%d Speed= %d\r\n", joystickAdcRaw, (int)joystickAdcFiltered, State.PulseDelay);
 		snprintf (txBuf, TXBUFLEN, "RIGHT ADC= %d FILT= %d DIST= %d Speed= %d DEADTICK=%ld\r\n", joystickAdcRaw, (int)joystickAdcFiltered, distanceFromMiddle, State.PulseDelay, deadZoneTick);
 	}
-	HAL_UART_Transmit(&huart2, (uint8_t*)txBuf, strlen (txBuf), HAL_MAX_DELAY);
+	//HAL_UART_Transmit(&huart2, (uint8_t*)txBuf, strlen (txBuf), HAL_MAX_DELAY);
 
-	// if we're in the central dead zone, force the speed to be 0
+	// if we're in the central dead zone, force the speed to be 0 - i.e. infinite pulse delay
 	if (abs(distanceFromMiddle) <= joystickcharacteristics.deadZone)
 	{
 		State.PulseDelay = 0x7FFFFFFF;	// 24 days. Not quite infinity.
 		deadZoneTick ++;				// keep track how long in dead-zone
-//		State.RunState = STOPPED;
+		activeZoneTick = 0;
+
+
+		// Dead-zone deactivate coils after 2.5 seconds...
+		if (deadZoneTick == 50 /* 2.5s */ ) // these ticks are every 50ms as per 9 lines up
+		{
+			State.RunState = STOPPED;
+			//HAL_Delay(5);	// not sure it's needed, but, delays, right?
+
+			// set all Stepper coils to low (no current anywhere)
+			HAL_GPIO_WritePin(Phase_A_GPIO_Port, Phase_A_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(Phase_B_GPIO_Port, Phase_B_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(Phase_C_GPIO_Port, Phase_C_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(Phase_D_GPIO_Port, Phase_D_Pin, GPIO_PIN_RESET);
+		}
 	}
-	else
+	else // not dead-zone, so active zone
 	{
-		deadZoneTick = 0; // continually reset the dead-zone timer to zero if not in the dead-zone
+		// if we've been in the active zone for less that 2.5 seconds, go at dead slow.
+		// but only if we've been in the deadzone up to now for quite a while - don't want
+		// the creep mode kicking in when accidentally passing quickly through the dead zone,
+		// when flicking the joystick left and right.
+		if (activeZoneTick < 50 && deadZoneTick > 10 /* 0.5 seconds */ )
+		{
+			State.PulseDelay = MOTORSLOW * 4;
+		}
+		else
+		{
+			deadZoneTick = 0; // continually reset the dead-zone timer to zero if not in the dead-zone
+		}
+
+		activeZoneTick++;
+
+
 		State.RunState = RUNNING;
 	}
 }
