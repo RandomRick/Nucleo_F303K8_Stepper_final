@@ -12,6 +12,7 @@
 #include <math.h>	// expf()
 #include <stdio.h>	// sprintf()
 
+
 extern ADC_HandleTypeDef hadc1;			// fron main.c
 
 
@@ -34,16 +35,16 @@ typedef struct {
 
 const joystickCharacteristics_t joystickcharacteristics = {0, 4055, 1970, 100};
 
-#define FIRSIZ 5
-#define MOTORSLOW 50
-#define MOTORFAST 2
+//#define FIRSIZ 5
+#define MOTORSLOW 100
+#define MOTORFAST 4
 
-static const float BandWidth = 1.0;
-static float FirTaps[FIRSIZ];
-static float SignalBuf[FIRSIZ];
-static float areaUnderTheCurve = 0;
-static float *p;
-static float*p2;
+//static const float BandWidth = 1.0;
+//static float FirTaps[FIRSIZ];
+//static float SignalBuf[FIRSIZ];
+//static float areaUnderTheCurve = 0;
+//static float *p;
+//static float*p2;
 
 float joystickAdcFiltered;
 int joystickAdcRaw;
@@ -60,6 +61,13 @@ float JoystickReadingFiltered()
 	// clip the value - the joystickcharacteristics are not set in stone.
 	if (joystickAdcRaw > joystickcharacteristics.adcRight) joystickAdcRaw = joystickcharacteristics.adcRight;
 
+	// ne version - use the dedicated FIR
+
+	joystickAdcFiltered = FIR_doWork_global((firFlt)joystickAdcRaw);
+	return joystickAdcFiltered;
+
+
+#ifdef OLDVERSION
 	//debug
 //	joystickAdcRaw = joystickcharacteristics.adcMiddle + joystickcharacteristics.deadZone + 2;	// test-case 1
 //	joystickAdcRaw = joystickcharacteristics.adcRight;											// test-case 2
@@ -88,35 +96,40 @@ float JoystickReadingFiltered()
 	joystickAdcFiltered = joystickAdcFiltered  / areaUnderTheCurve;
 
 	return joystickAdcFiltered;
+#endif
 }
 
 
 
 
-void JoystickInit()
+void JoystickInit(unsigned int nTaps, firFlt normBandwidth)
 {
 	// reserve space for FIR taps and signal buffer
 	// FirTaps     = malloc (sizeof(float) * FIRSIZ);
 	// SignalBuf   = malloc (sizeof(float) * FIRSIZ);
 	// memset (SignalBuf, 0, sizeof(float) * FIRSIZ);
 
-	// Create a starting history of adc readings that correspond to the middle posn
-	for (int i=0; i < FIRSIZ; i++)
-		SignalBuf[i] = joystickcharacteristics.adcMiddle;
+	// new version!  Use the FIR.c, FIR.h stuff.
+	FIR_init_global(nTaps /* num taps */, normBandwidth /* normalised BW */, joystickcharacteristics.adcMiddle);
+	return;
 
-
-	p = SignalBuf;				// points to oldest element in buffer
-	p2 = SignalBuf + FIRSIZ;	// points to 1 beyond the buffer. For wrapping
-
-	// Compute FIR taps
-	for (int t=0; t < FIRSIZ; t++)
-	{
-//		float tempval = (float)1 - expf (-BandWidth * (t+1));
-		float tempval = (float)1 - expf (-BandWidth * (t+1))  * (1 + (t+1) * BandWidth);
-
-		FirTaps[t] = tempval;
-		areaUnderTheCurve += tempval;
-	}
+//	// Create a starting history of adc readings that correspond to the middle posn
+//	for (int i=0; i < FIRSIZ; i++)
+//		SignalBuf[i] = joystickcharacteristics.adcMiddle;
+//
+//
+//	p = SignalBuf;				// points to oldest element in buffer
+//	p2 = SignalBuf + FIRSIZ;	// points to 1 beyond the buffer. For wrapping
+//
+//	// Compute FIR taps
+//	for (int t=0; t < FIRSIZ; t++)
+//	{
+////		float tempval = (float)1 - expf (-BandWidth * (t+1));
+//		float tempval = (float)1 - expf (-BandWidth * (t+1))  * (1 + (t+1) * BandWidth);
+//
+//		FirTaps[t] = tempval;
+//		areaUnderTheCurve += tempval;
+//	}
 }
 
 void InterpretADC()

@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>		// sprintf
@@ -113,7 +114,7 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
-  JoystickInit();
+  JoystickInit(10, 0.5);
   StateMachineInit();				// put my state machine into a known state
   HAL_TIM_Base_Start_IT(&htim16);	// start the 1ms timer
 
